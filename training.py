@@ -17,28 +17,30 @@ train_data, train_labels, test_data, test_labels  = leaf_reader.readTrainingData
 # Parameters
 
 #decaying learning rate
-starter_learning_rate = 0.1
+starter_learning_rate = 0.01
 global_step = tf.Variable(0, trainable=False)
 
-learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step,
-                                           10000, 0.99, staircase=True)
+#learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step, 10000, 0.99, staircase=True)
+learning_rate = starter_learning_rate
 
-training_epochs = 30
+training_epochs = 100
 
 #how many times we go trough whole dataset in one epoch
-iterations = 50
+iterations = 20
 
-batch_size = 50
+batch_size = 16
 
 # how often (in epochs) evaluation happens
 display_step = 1
 
 
 #nn = models.ThreeLayerNet()
-nn = models.TwoLayerNet(60)
+#nn = models.TwoLayerNet(200)
 
-optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(nn.cost,global_step)
+nn = models.ConvNet1D(80,120)
 
+#optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(nn.cost,global_step)
+optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum =0.9).minimize(nn.cost,global_step)
 
 
 is_correct_prediction = tf.equal(tf.argmax(nn.predict, 1), tf.argmax(nn.y, 1))
