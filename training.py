@@ -4,8 +4,6 @@ import tensorflow as tf
 import models
 
 
-
-
 train_data,train_labels,test_data,test_labels,train_descriptors,test_descriptors=leaf_reader.readTrainingData(update_descriptors = False)
 
 
@@ -69,8 +67,8 @@ def rnd_shuffle():
 with tf.Session() as sess:
     sess.run(init)
 
-    batch_count = int(train_data.shape[1]/batch_size)  
-
+    batch_count = train_data.shape[1]//batch_size  
+    best_accuracy = 0.
     # Training cycle
     for epoch in range(training_epochs):
 
@@ -94,12 +92,15 @@ with tf.Session() as sess:
                 avg_cost += c / (batch_count*iterations)
 
         # Display logs per epoch step
-        if ((epoch+1) % display_step == 0):
+        if (epoch+1) % display_step == 0:
             if (isinstance(nn,models.FourierNet)):
                 acc=accuracy.eval({nn.x1: test_data[:,0:64], nn.x2: test_data[:,64:192], nn.y: test_labels})
             else:
                 acc=accuracy.eval({nn.x: test_data, nn.y: test_labels})
+
+            if acc > best_accuracy:
+               best_accuracy = acc
             print("Epoch:", '%04d' % (epoch), "training cost=","{:.9f}".format(avg_cost), \
             "accuracy=","{:.9f}".format(acc))
-
+    print("Best accuracy: " + str(best_accuracy))
     print("Optimization Finished!")

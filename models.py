@@ -2,6 +2,13 @@ import numpy as np
 import tensorflow as tf
 
 
+def conv1d(x, W, b, stride=1):
+    # Conv1D wrapper, with bias and relu activation 
+    _x = tf.nn.conv1d(x, W, stride, padding="SAME")
+    _x = tf.nn.bias_add(_x, b)
+    return tf.nn.relu(_x)
+
+
 class FourierNet(object):
 
     def __init__(self, filters = 256, n_hidden1=400, stride=1, n_input1=64,n_channels=1,n_input2=128, n_classes = 99):
@@ -50,19 +57,13 @@ class FourierNet(object):
                 + 0.0001*tf.nn.l2_loss(self.biases['out']))
 
 
-    def conv1D(x, W, b, stride=1):
-        # Conv1D wrapper, with bias and relu activation
-        x = tf.nn.conv1d(x, W, stride, padding="VALID")
-        x = tf.nn.bias_add(x, b)
-        return tf.nn.relu(x)
-
     # Create model computation function
     def compute(self,x1,x2, weights, biases):
 
         x1 = tf.reshape(x1, shape=[-1, self.n_input1, self.n_channels])
-        act1 = tf.nn.conv1d(x1,weights['c1'],self.stride,padding="SAME")
-        act1 = tf.nn.bias_add(act1, biases['bc1'])
-        act1 = tf.nn.relu(act1)
+
+        act1 = conv1d(x1,weights['c1'],biases['bc1'],self.stride)
+
         #flatten
         act1= tf.reshape(act1, shape = [-1,(self.n_input1//self.stride)*self.filters])
         act1= tf.concat(1,[act1,x2])
@@ -128,30 +129,15 @@ class ConvNet1D2(object):
                 + 0.0001*tf.nn.l2_loss(self.biases['b1'])
                 + 0.0001*tf.nn.l2_loss(self.biases['out']))
 
-
-    # for some reason this does not work
-    def conv1D(x, W, b, stride=1):
-        # Conv1D wrapper, with bias and relu activation
-        x = tf.nn.conv1d(x, W, stride, padding="VALID")
-        x = tf.nn.bias_add(x, b)
-        return tf.nn.relu(x)
-
     # Create model computation function
     def compute(self,x, weights, biases):
 
         x = tf.reshape(x, shape=[-1, self.n_input, 3])
-        #act1= self.conv1D(x,weights['c1'], biases['bc1'])
-        act1 = tf.nn.conv1d(x,weights['c1'],self.stride1,padding="SAME")
-        act1 = tf.nn.bias_add(act1, biases['bc1'])
-        act1 = tf.nn.relu(act1)
-
+        act1 = conv1d(x,weights['c1'],biases['bc1'],self.stride1)
         # try dropout
         #act1 = tf.nn.dropout(act1,0.2)
 
-        act2 = tf.nn.conv1d(act1,weights['c2'],self.stride2,padding="SAME")
-        act2 = tf.nn.bias_add(act2, biases['bc2'])
-        act2 = tf.nn.relu(act2)
-
+        act2 = conv1d(act1,weights['c1'],biases['bc1'],self.stride2)
         #act2 = tf.nn.dropout(act2,0.2)
 
         #flatten
@@ -210,21 +196,12 @@ class ConvNet1D(object):
                 + 0.0001*tf.nn.l2_loss(self.biases['bc1'])
                 + 0.0001*tf.nn.l2_loss(self.biases['out']))
 
-
-    def conv1D(x, W, b, stride=1):
-        # Conv1D wrapper, with bias and relu activation
-        x = tf.nn.conv1d(x, W, stride, padding="VALID")
-        x = tf.nn.bias_add(x, b)
-        return tf.nn.relu(x)
-
     # Create model computation function
     def compute(self,x, weights, biases):
 
         x = tf.reshape(x, shape=[-1, self.n_input, 3])
-        #act1= self.conv1D(x,weights['c1'], biases['bc1'])
-        act1 = tf.nn.conv1d(x,weights['c1'],self.stride,padding="SAME")
-        act1 = tf.nn.bias_add(act1, biases['bc1'])
-        act1 = tf.nn.relu(act1)
+
+        act1 = conv1d(x,weights['c1'],biases['bc1'],self.stride)
         #flatten
         act1= tf.reshape(act1, shape = [-1,(self.n_input//self.stride)*self.filters])
 
