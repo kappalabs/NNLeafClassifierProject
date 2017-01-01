@@ -85,7 +85,7 @@ def mutate(in_dir, filename, out_dir):
             translate(rot_file, rot_out_file + "u" + str(translation), 0, -translation)
             translate(rot_file, rot_out_file + "r" + str(translation), translation, 0)
 
-#         TODO: zvětšení/zmenšení, šum
+#         TODO: zvětšení/zmenšení, šum + důležité transformace (FD jsou inverzní k posunu a škálování!)
 
 
 def generate_mutations(in_dir, out_dir):
