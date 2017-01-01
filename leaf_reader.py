@@ -50,7 +50,7 @@ def readTrainingData(tests_per_species=1, update_descriptors=False, num_descript
             test_labels.append(encoding[row.values[1]])
 
             if update_descriptors:
-                descriptor = feature_extraction.extract_fourier_descriptors(
+                descriptor = feature_extraction.extract_image_descriptors(
                     'images/' + str(row.values[0]) + ".jpg", num_descriptors)
                 np.save("descriptors/" + str(row.values[0]), descriptor)
                 test_descriptors.append(descriptor)
@@ -62,7 +62,7 @@ def readTrainingData(tests_per_species=1, update_descriptors=False, num_descript
             train_labels.append(encoding[row.values[1]])
 
             if update_descriptors:
-                descriptor = feature_extraction.extract_fourier_descriptors(
+                descriptor = feature_extraction.extract_image_descriptors(
                     'images/' + str(row.values[0]) + ".jpg", num_descriptors)
                 np.save("descriptors/" + str(row.values[0]), descriptor)
                 train_descriptors.append(descriptor)
