@@ -26,21 +26,22 @@ learning_rate = starter_learning_rate
 training_epochs = 100
 
 #how many times we go trough whole dataset in one epoch
-iterations = 20
+iterations = 30
 
-batch_size = 16
+batch_size = 32
 
 # how often (in epochs) evaluation happens
 display_step = 1
 
 
 #nn = models.ThreeLayerNet()
-#nn = models.TwoLayerNet(200)
+#nn = models.TwoLayerNet(400)
+#nn = models.ConvNet1D(256,150)
+nn = models.ConvNet1D2(256,120,150)
 
-nn = models.ConvNet1D(80,120)
 
 #optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(nn.cost,global_step)
-optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum =0.9).minimize(nn.cost,global_step)
+optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum =0.8).minimize(nn.cost,global_step)
 
 
 is_correct_prediction = tf.equal(tf.argmax(nn.predict, 1), tf.argmax(nn.y, 1))
@@ -63,7 +64,7 @@ with tf.Session() as sess:
 
     batch_count = int(train_data.shape[1]/batch_size)
 
-    rnd_shuffle(train_data, train_labels)
+    
 
     # Training cycle
     for epoch in range(training_epochs):
@@ -71,6 +72,7 @@ with tf.Session() as sess:
         avg_cost = 0.
 
         for i in range(iterations):        
+            rnd_shuffle(train_data, train_labels)
             # Loop over all batches
             for j in range(batch_count):
                 batch_x = train_data[j*batch_size:(j+1)*batch_size] 
