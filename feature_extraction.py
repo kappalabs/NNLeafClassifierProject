@@ -58,6 +58,9 @@ def extract_fourier_descriptors(in_file, num_descriptors=64):
 
     # Select only few first values of the transform without the first one (bias),
     # scale by the bias to get scale invariance -> fourier descriptors
-    f = f[1:num_descriptors + 1] / f[0]
+    fds = f[1:num_descriptors + 1] / f[0]
 
-    return f.real
+    # Take the magnitude
+    fds = np.log(np.abs(fds))
+
+    return fds
