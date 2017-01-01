@@ -6,7 +6,7 @@ import models
 
 
 
-train_data, train_labels, test_data, test_labels  = leaf_reader.readTrainingData()
+train_data,train_labels,test_data,test_labels,train_descriptors,test_descriptors=leaf_reader.readTrainingData(update_descriptors = False)
 
 #shape check
 #print(train_data.shape)
