@@ -1,21 +1,14 @@
-import numpy as np
-
-import scipy as sp
-import scipy.ndimage as ndi
-from scipy.signal import argrelextrema
-import scipy.signal as signal
-import cv2
-
-import pandas as pd
-
-from skimage import measure
-from sklearn import metrics
-
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-
+import numpy as np
+import scipy as sp
+import scipy.ndimage as ndi
+import scipy.signal as signal
+from matplotlib.pyplot import fill
 from pylab import rcParams
+from scipy.signal import argrelextrema
+from skimage import measure
+from sklearn import metrics
 
 
 # ----------------------------------------------------- I/O ---
@@ -35,7 +28,8 @@ def get_imgs(num):
         yield img_no, preprocess(read_img(img_no))
 
 def get_img(img_no):
-    return preprocess(read_img(img_no))
+    # return preprocess(read_img(img_no))
+    return read_img(img_no)
 
 # ----------------------------------------------------- preprocessing ---
 
@@ -125,17 +119,18 @@ def best_symmetry(extrema, shape):
     size = extrema.size
     errors = []
     for i in range(size):
-        err=0
-        for n in range(1,size//2):
-            diff1= np.abs(shape[extrema[i]]-shape[extrema[(i-n)%size]])
-            diff2= np.abs(shape[extrema[(i+n)%size]]-shape[extrema[i]])   
-            err+=np.linalg.norm(diff1-diff2)
-        print(err)
+        err = 0
+        for n in range(1, size // 2):
+            diff1 = np.abs(shape[extrema[i]] - shape[extrema[(i - n) % size]])
+            # print(diff1)
+            diff2 = np.abs(shape[extrema[(i + n) % size]] - shape[extrema[i]])
+            err += np.linalg.norm(diff1 - diff2)
+        # print(err)
         errors.append(err)
     arr = np.array(errors)
     sorted = arr.argsort()
     return extrema[sorted[0]], extrema[sorted[1]]
-    #return (max_index, max_index1)
+    # return (max_index, max_index1)
 
 
 #title, img = list(get_imgs([58]))[0]  #48 #188 #709 #53
@@ -173,8 +168,11 @@ for img_no in range(1,10):
     curve = normalize(curve)
 
 
-    conv = np.convolve(curve, curve, 'same')
-    #conv = conv[conv.size//2:]
+    conv = np.convolve(np.hstack((curve, curve)), curve, 'same')
+
+    max_indices_conv = argrelextrema(curve, np.greater, order=50)[0]
+
+    max_conv = np.argmax(conv) % len(curve)
 
 
     # local extrema
@@ -183,7 +181,11 @@ for img_no in range(1,10):
     max_indices = np.insert(max_indices, 0, 0)
     print (min_indices.shape, max_indices.shape)
     extrema = np.insert(min_indices, np.arange(len(max_indices)), max_indices)
+    extrema = np.sort(extrema)
     print ("extrema:",extrema)
+
+    # conv = np.convolve(extrema, extrema[::-1], 'same')
+    # max_conv = np.argmax(conv)
 
     best,second_best = best_symmetry(extrema,shape)
 
@@ -199,6 +201,9 @@ for img_no in range(1,10):
     ax1.scatter(shape_x[min_indices], shape_y[min_indices],linewidth=0, s=30, c='b')
     ax1.scatter(shape_x[best], shape_y[best],linewidth=0, s=50, c='g')
     ax1.scatter(shape_x[second_best], shape_y[second_best],linewidth=0, s=50, c='y')
+
+    ax1.scatter(shape_x[max_conv], shape_y[max_conv], linewidth=0, s=100, c='g')
+    ax1.scatter(shape_x[max_indices_conv], shape_y[max_indices_conv],linewidth=0, s=90, c='y')
 
     ax2 = plt.subplot2grid((2,3), (0,2))
     ax2.set_xticks([])
@@ -218,5 +223,5 @@ for img_no in range(1,10):
 
 
     plt.show()
-    input("press Enter")
+    # input("press Enter")
 
