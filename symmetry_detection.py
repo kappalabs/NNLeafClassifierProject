@@ -106,15 +106,12 @@ def dist_line_point(src_arr, point):
 
 
 # wrapper function for all preprocessing tasks    
-def preprocess(img, do_portrait=False, do_resample=300, 
-               do_fill=False, do_threshold=250):
+def preprocess(img, do_portrait=False, do_resample=300,do_threshold=250):
     """ prepares image for processing"""
     if do_portrait:
         img = portrait(img)
     if do_resample:
         img = resample(img, size=do_resample)
-    if do_fill:
-        img = fill(img, size=do_resample)
     if do_threshold:
         img = threshold(img, threshold=do_threshold)
         
@@ -143,8 +140,8 @@ def best_symmetry(extrema, shape):
 
 # First, design the Buterworth filter
 N  = 2    # Filter order
-Wn = 0.01 # Cutoff frequency
-b, a = signal.butter(2, 0.04, analog=False)
+Wn = 0.04 # Cutoff frequency
+b, a = signal.butter(N, Wn, analog=False)
 
 for img_no in range(1,10):
 
