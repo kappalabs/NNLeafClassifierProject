@@ -28,8 +28,8 @@ def get_imgs(num):
         yield img_no, preprocess(read_img(img_no))
 
 def get_img(img_no):
-    # return preprocess(read_img(img_no))
-    return read_img(img_no)
+    return preprocess(read_img(img_no))
+    #return read_img(img_no)
 
 # ----------------------------------------------------- preprocessing ---
 
@@ -129,13 +129,63 @@ def best_symmetry(extrema, shape):
     return extrema[sorted[0]], extrema[sorted[1]]
     # return (max_index, max_index1)
 
+def arc_error(start,end,shape):
+    size = len(shape)
+    err=0
+
+    p1=start
+    p2=end
+    if (start>end):
+        p2=start
+        p1=end
+
+
+    for x in range(p1,p2):
+        diff1= np.abs(shape[(x+p1)%size]-shape[p1])
+        diff2= np.abs(shape[(p1-x)%size]-shape[p1])     
+        err+=np.linalg.norm(diff1-diff2)
+    return err
+
+def best_symmetry2(extrema,shape,arclength):
+    size = extrema.size
+    
+    errors = []
+    errors_ind = []
+    for i in range(size//2+1):
+        err=0
+        loc_errors = []
+        for n in range(1,size):
+            err = np.abs(np.abs(extrema[i]-extrema[(i+n)%size]) - arclength/2)
+            loc_errors.append(err)
+            #print(err)
+        #arr = np.array(errors)
+        mini = np.argmin(loc_errors)
+        #print(min)
+        errors.append(loc_errors[mini])
+        errors_ind.append([i,(i+mini+1)%size])
+    arr = np.array(errors)
+    sorted_err= arr.argsort()
+    arr2 = np.array(errors_ind)
+    sorted = arr2[sorted_err]
+
+    #print(sorted)
+    mini=1000000000
+    min_index = 0
+    for i in range(0,min(8,len(sorted))):
+        err = arc_error(extrema[sorted[i][0]], extrema[sorted[i][1]],shape)
+        #print(err)
+        if (err<mini):
+            min_index=i
+            mini = err
+
+    return extrema[sorted[min_index][0]], extrema[sorted[min_index][1]]  
 
 #title, img = list(get_imgs([58]))[0]  #48 #188 #709 #53
 
 
 # First, design the Buterworth filter
 N  = 2    # Filter order
-Wn = 0.04 # Cutoff frequency
+Wn = 0.05 # Cutoff frequency
 b, a = signal.butter(N, Wn, analog=False)
 
 for img_no in range(1,10):
@@ -173,8 +223,8 @@ for img_no in range(1,10):
 
 
     # local extrema
-    max_indices = argrelextrema(curve, np.greater, order=20)[0]
-    min_indices = argrelextrema(curve, np.less, order=20)[0]
+    max_indices = argrelextrema(curve, np.greater, order=30)[0]
+    min_indices = argrelextrema(curve, np.less, order=30)[0]
     max_indices = np.insert(max_indices, 0, 0)
     print (min_indices.shape, max_indices.shape)
     extrema = np.insert(min_indices, np.arange(len(max_indices)), max_indices)
@@ -184,7 +234,7 @@ for img_no in range(1,10):
     # conv = np.convolve(extrema, extrema[::-1], 'same')
     # max_conv = np.argmax(conv)
 
-    best,second_best = best_symmetry(extrema,shape)
+    best,second_best = best_symmetry2(extrema,shape,curve.size)
 
     rcParams['figure.figsize'] = (16,10)
 
@@ -199,8 +249,8 @@ for img_no in range(1,10):
     ax1.scatter(shape_x[best], shape_y[best],linewidth=0, s=50, c='g')
     ax1.scatter(shape_x[second_best], shape_y[second_best],linewidth=0, s=50, c='y')
 
-    ax1.scatter(shape_x[max_conv], shape_y[max_conv], linewidth=0, s=100, c='g')
-    ax1.scatter(shape_x[max_indices_conv], shape_y[max_indices_conv],linewidth=0, s=90, c='y')
+    #ax1.scatter(shape_x[max_conv], shape_y[max_conv], linewidth=0, s=50, c='g')
+    #ax1.scatter(shape_x[max_indices_conv], shape_y[max_indices_conv],linewidth=0, s=90, c='y')
 
     ax2 = plt.subplot2grid((2,3), (0,2))
     ax2.set_xticks([])
