@@ -4,11 +4,13 @@ import numpy as np
 import scipy as sp
 import scipy.ndimage as ndi
 import scipy.signal as signal
+import scipy.fftpack as fftpack
 from matplotlib.pyplot import fill
 from pylab import rcParams
 from scipy.signal import argrelextrema
 from skimage import measure
 from sklearn import metrics
+from collections import deque
 
 
 # ----------------------------------------------------- I/O ---
@@ -28,8 +30,8 @@ def get_imgs(num):
         yield img_no, preprocess(read_img(img_no))
 
 def get_img(img_no):
-    return preprocess(read_img(img_no))
-    #return read_img(img_no)
+    # return preprocess(read_img(img_no))
+    return read_img(img_no)
 
 # ----------------------------------------------------- preprocessing ---
 
@@ -61,6 +63,7 @@ def normalize(arr1d):
 def coords_to_cols(coords):
     """from x,y pairs to feature columns"""
     return coords[::,1], coords[::,0]
+    # return np.hstack((coords[::, 1], coords[0, 1])), np.hstack((coords[::, 0], coords[0, 0]))
 
 
 def get_contour(img):
@@ -100,7 +103,7 @@ def dist_line_point(src_arr, point):
 
 
 # wrapper function for all preprocessing tasks    
-def preprocess(img, do_portrait=False, do_resample=300,do_threshold=250):
+def preprocess(img, do_portrait=False, do_resample=300, do_threshold=250):
     """ prepares image for processing"""
     if do_portrait:
         img = portrait(img)
@@ -146,9 +149,34 @@ def arc_error(start,end,shape):
         err+=np.linalg.norm(diff1-diff2)
     return err
 
+
+def shape_distance(start, end, shape):
+    size = len(shape)
+    length = 0
+
+    if start > end:
+        end += size
+        # tmp = start
+        # start = end
+        # end = tmp
+
+    for pos in range(start + 1, end):
+        length += np.linalg.norm(shape[pos % size] - shape[[(pos - 1) % size]], ord=2)
+        # print("pos1=", shape[pos % size], ", pos2=", shape[[(pos - 1) % size]])
+
+    # print("from " + str(start) + " to " + str(end))
+    # plt.plot(shape_x, shape_y, c='b')
+    # plt.plot(orig_shape_x, orig_shape_y, c='g')
+    # plt.scatter(shape_cy, shape_cx, marker='x')
+    # plt.scatter(shape_x[range(start + 1, end) % size], shape_y[range(start + 1, end) % size], linewidth=0, s=80, c='r')
+    # plt.show()
+
+    return length
+
+
 def best_symmetry2(extrema,shape,arclength):
     size = extrema.size
-    
+
     errors = []
     errors_ind = []
     for i in range(size//2+1):
@@ -178,9 +206,61 @@ def best_symmetry2(extrema,shape,arclength):
             min_index=i
             mini = err
 
-    return extrema[sorted[min_index][0]], extrema[sorted[min_index][1]]  
+    return extrema[sorted[min_index][0]], extrema[sorted[min_index][1]]
+
+
+def rotate(l, n):
+    return l[-n:] + l[:-n]
+
+
+def best_symmetry3(inflexes, curve, shape):
+    errors = []
+    errors_indexes = []
+    num_inflexes = len(inflexes)
+
+    offset = 0
+    for i in range(0, len(curve) / 2, 50):
+        while i >= inflexes[offset % num_inflexes]:
+            offset += 1
+        err = 0
+        for j in range(int(np.floor(num_inflexes / 2))):
+            right_inflex_index = inflexes[(j + offset) % num_inflexes]
+            left_inflex_index = inflexes[(num_inflexes - j - 1 + offset) % num_inflexes]
+            err += np.abs(shape_distance(i, right_inflex_index, shape) - shape_distance(left_inflex_index, i, shape))
+
+            # plt.plot(shape_x, shape_y, c='b')
+            # plt.plot(orig_shape_x, orig_shape_y, c='g')
+            # plt.scatter(shape_cy, shape_cx, marker='x')
+            # plt.scatter(shape_x[i], shape_y[i], linewidth=0, s=80, c='r')
+            # plt.scatter(shape_x[inflexes], shape_y[inflexes], linewidth=0, s=80, c='y')
+            # plt.scatter(shape_x[right_inflex_index], shape_y[right_inflex_index], linewidth=0, s=50, c='g')
+            # plt.scatter(shape_x[left_inflex_index], shape_y[left_inflex_index], linewidth=0, s=50, c='b')
+            # plt.show()
+        errors = np.hstack((errors, err))
+        errors_indexes.append(i)
+        print("i = " + str(i) + ", err = " + str(err))
+
+    error_arr = np.array(errors)
+    error_indexes_arr = np.array(errors_indexes)
+    sorted_indexes = error_arr.argsort()
+    sorted_indexes = error_indexes_arr[sorted_indexes]
+
+    return [sorted_indexes[0], sorted_indexes[1]]
 
 #title, img = list(get_imgs([58]))[0]  #48 #188 #709 #53
+
+
+def maxima_space(curve):
+    space_x = []
+    for filter_size in range(1, 200):
+        curve_smooth = ndi.gaussian_filter(curve, filter_size / 2, mode='wrap')
+
+        max_indexes = argrelextrema(curve_smooth, np.greater)[0]
+
+        plt.scatter(max_indexes, np.ones((1, max_indexes.size)) * filter_size, linewidth=0, s=1, c='r')
+
+    print(space_x)
+    plt.show()
 
 
 # First, design the Buterworth filter
@@ -188,7 +268,7 @@ N  = 2    # Filter order
 Wn = 0.05 # Cutoff frequency
 b, a = signal.butter(N, Wn, analog=False)
 
-for img_no in range(1,10):
+for img_no in range(1, 10):
 
     img = get_img(img_no)
      
@@ -201,23 +281,49 @@ for img_no in range(1,10):
     shape_x, shape_y = coords_to_cols(shape)
     orig_shape_x, orig_shape_y = coords_to_cols(orig_shape)
 
-    shape_y = signal.filtfilt(b,a, shape_y, padtype="odd")
-    shape_x = signal.filtfilt(b,a, shape_x, padtype="odd")
+    # shape_y = signal.filtfilt(b, a, shape_y, padtype="odd")
+    # shape_x = signal.filtfilt(b, a, shape_x, padtype="odd")
 
-    rx = np.reshape(shape_x,(-1,1))
-    ry = np.reshape(shape_y,(-1,1))
-    shape = np.concatenate((ry,rx), axis = 1)
+    shape_y = ndi.gaussian_filter(shape_y, 150, mode='wrap')
+    shape_x = ndi.gaussian_filter(shape_x, 150, mode='wrap')
 
+    # shape_x = sp.signal.savgol_filter(shape_x, 51, 3)
+    # shape_y = sp.signal.savgol_filter(shape_y, 51, 3)
+
+    rx = np.reshape(shape_x, (-1, 1))
+    ry = np.reshape(shape_y, (-1, 1))
+    shape = np.concatenate((rx, ry), axis=1)
 
     curve = dist_line_point(shape, [shape_cx, shape_cy])
-
-
     curve = normalize(curve)
 
+    # maxima_space(curve)
 
-    conv = np.convolve(np.hstack((curve, curve)), curve, 'same')
+    derivation = sp.fftpack.diff(curve)
+    second_derivation = sp.fftpack.diff(derivation)
 
-    max_indices_conv = argrelextrema(curve, np.greater, order=50)[0]
+    # derivation_x = derivation_x[np.isclose(derivation_x, 0)]
+    der_indexes = []
+    last_val = second_derivation[0]
+    for i in range(1, len(second_derivation)):
+        if last_val < 0 <= second_derivation[i] or last_val > 0 >= second_derivation[i]:
+            # der_indexes = der_indexes.append(i)
+            if len(der_indexes) > 0:
+                der_indexes = np.hstack((der_indexes, i))
+            else:
+                der_indexes = [i]
+        last_val = second_derivation[i]
+
+    func = np.zeros(curve.shape)
+    print(func.size)
+    func[der_indexes] = curve[der_indexes]
+
+    conv = np.convolve(np.hstack((func, func)), func[::-1], 'valid')
+
+    # max_indices_conv = (argrelextrema(conv, np.greater, order=50)[0] - len(curve)/2) % len(curve)
+    max_indices_conv = (argrelextrema(conv, np.greater, order=50)[0]) % len(curve)
+
+    print("conv indexes: ", max_indices_conv)
 
     max_conv = np.argmax(conv) % len(curve)
 
@@ -229,12 +335,12 @@ for img_no in range(1,10):
     print (min_indices.shape, max_indices.shape)
     extrema = np.insert(min_indices, np.arange(len(max_indices)), max_indices)
     extrema = np.sort(extrema)
-    print ("extrema:",extrema)
+    print ("extrema:", extrema)
 
     # conv = np.convolve(extrema, extrema[::-1], 'same')
     # max_conv = np.argmax(conv)
 
-    best,second_best = best_symmetry2(extrema,shape,curve.size)
+    best, second_best = best_symmetry3(der_indexes, curve, shape)
 
     rcParams['figure.figsize'] = (16,10)
 
@@ -242,15 +348,16 @@ for img_no in range(1,10):
     ax1.set_title('Image #' + str(img_no))
 
     ax1.plot(shape_x, shape_y, c='b')
-    #ax1.plot(orig_shape_x, orig_shape_y, c='g')
+    ax1.plot(orig_shape_x, orig_shape_y, c='g')
     ax1.scatter(shape_cy, shape_cx, marker='x')
-    ax1.scatter(shape_x[max_indices], shape_y[max_indices],linewidth=0, s=30, c='r')
-    ax1.scatter(shape_x[min_indices], shape_y[min_indices],linewidth=0, s=30, c='b')
-    ax1.scatter(shape_x[best], shape_y[best],linewidth=0, s=50, c='g')
-    ax1.scatter(shape_x[second_best], shape_y[second_best],linewidth=0, s=50, c='y')
+    # ax1.scatter(shape_x[max_indices], shape_y[max_indices], linewidth=0, s=30, c='r')
+    # ax1.scatter(shape_x[min_indices], shape_y[min_indices], linewidth=0, s=30, c='b')
+    ax1.scatter(orig_shape_x[best], orig_shape_y[best], linewidth=0, s=70, c='g')
+    ax1.scatter(orig_shape_x[second_best], orig_shape_y[second_best], linewidth=0, s=70, c='y')
+    ax1.scatter(shape_x[der_indexes], shape_y[der_indexes], linewidth=0, s=50, c='r')
 
-    #ax1.scatter(shape_x[max_conv], shape_y[max_conv], linewidth=0, s=50, c='g')
-    #ax1.scatter(shape_x[max_indices_conv], shape_y[max_indices_conv],linewidth=0, s=90, c='y')
+    # ax1.scatter(shape_x[max_indices_conv], shape_y[max_indices_conv], linewidth=0, s=80, c='y')
+    # ax1.scatter(shape_x[max_conv], shape_y[max_conv], linewidth=0, s=100, c='g')
 
     ax2 = plt.subplot2grid((2,3), (0,2))
     ax2.set_xticks([])
@@ -258,8 +365,9 @@ for img_no in range(1,10):
     ax2.set_title('Distance curve ('+ 
                   str(len(curve))+'features)')
     ax2.plot(range(len(curve)), curve, c='g')
-    ax2.scatter(max_indices, curve[max_indices],linewidth=0, s=30, c='r')
-    ax2.scatter(min_indices, curve[min_indices],linewidth=0, s=30, c='b')
+    # ax2.scatter(max_indices, curve[max_indices],linewidth=0, s=30, c='r')
+    # ax2.scatter(min_indices, curve[min_indices],linewidth=0, s=30, c='b')
+    ax2.scatter(der_indexes, curve[der_indexes], linewidth=0, s=30, c='r')
 
     ax3 = plt.subplot2grid((2,3), (1,2))
     ax3.set_title('convolution')
