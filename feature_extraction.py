@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from skimage import util
 from skimage.measure import label
 from random import uniform
+from symmetry_detection import dist_line_point, normalize
 
 
 def cart2pol(x, y):
@@ -15,86 +16,102 @@ def cart2pol(x, y):
 
     :param x: Cartesian X axis value.
     :param y: Cartesian Y axis value.
-    :return: Coordinates in the polar system.
+    :return: Coordinates in the polar system (distance, angle).
     """
-    rho = np.sqrt(x ** 2 + y ** 2)
-    phi = np.arctan2(y, x)
-    return [rho, phi]
+    distance = np.sqrt(x ** 2 + y ** 2)
+    angle = np.arctan2(y, x)
+    return [distance, angle]
 
 
-def pol2cart(rho, phi):
+def pol2cart(distance, angle):
     """
     Polar to cartesian coordinates.
 
-    :param rho: Distance in polar coordinates.
-    :param phi: Angle in polar coordinates.
+    :param distance: Distance in polar coordinates.
+    :param angle: Angle in polar coordinates.
     :return: Coordinates in the cartesian system.
     """
-    x = rho * np.cos(phi)
-    y = rho * np.sin(phi)
+    x = distance * np.cos(angle)
+    y = distance * np.sin(angle)
     return [x, y]
 
 
-def extract_fourier_descriptors(in_file, num_descriptors=64):
+def extract_distance_line(image, line_length=64, normalization=True):
+    """
+    Extracts distance line from given image.
+
+    :param normalization: If normalization of the curve (into [0;1]) should be performed.
+    :param image: Image to be processed.
+    :param line_length: Desired length of the distance curve vector.
+    :return: Distance curve of given image measured from center of mass.
+    """
+    shape = max(measure.find_contours(image, .8), key=len)
+
+    # Blur the shape
+    shape = ndi.gaussian_filter(shape, 20)
+
+    # Find center of mass of the leaf
+    cy, cx = ndi.center_of_mass(image)
+
+    # Calculate distance curve
+    curve = dist_line_point(shape, [cx, cy])
+
+    # plt.subplot(121)
+    # plt.plot(curve, linewidth=0.5)
+
+    # Take only given number of points on this curve
+    curve = curve[range(0, len(curve), len(curve) / line_length)]
+    if normalization:
+        curve = normalize(curve)[0:line_length]
+
+    # plt.subplot(122)
+    # plt.plot(curve, linewidth=0.5)
+    # plt.show()
+    # print(curve.shape)
+
+    return np.asarray(curve)
+
+
+def extract_fourier_descriptors(img_orig, num_descriptors=64):
     """
     Extracts required number of fourier descriptors from image in given file.
 
-    :param in_file: File containing image to be processed.
+    :param img_orig: Image to be processed.
     :param num_descriptors: Number of required fourier descriptors.
     """
-    # Read an image file using matplotlib into a numpy array
-    img = mpimg.imread(in_file)
-
-    # Use image processing module of scipy to find the center of the leaf
-    cy, cx = ndi.center_of_mass(img)
-
-    # Blur the image a little before processing
-    # img = ndi.gaussian_filter(img, 1)
-
-    # scikit-learn imaging contour finding, returns a list of found edges, we select the longest one
-    contour = max(measure.find_contours(img, .8), key=len)
-    #
-    # plt.plot(contour[::, 1], contour[::, 0], linewidth=0.5)
-    # plt.imshow(img, cmap='Set3')
-    # plt.show()
-
-    # Move contour centroid to zero
-    contour[::, 1] -= cx
-    contour[::, 0] -= cy
-
     # Transformation on all pairs in the set
-    polar_contour = np.array([cart2pol(rho, phi) for rho, phi in contour])
+    polar_contour = extract_distance_line(img_orig, line_length=num_descriptors*2, normalization=False)
 
     # Fourier transform of the polar representation
-    f = np.fft.fft(polar_contour[::, 0])
+    f = np.fft.fft(polar_contour)
 
     # Select only few first values of the transform without the first one (bias),
     # scale by the bias to get scale invariance -> fourier descriptors
     fds = f[1:num_descriptors + 1] / f[0]
 
     # Take the magnitude
-    fds = np.log(np.abs(fds))
+    fds = np.log(1 + np.abs(fds))
+
+    # Normalize them
+    # fds = normalize(fds)
 
     return fds
 
 
-def extract_volume_matrix(in_file, rows, columns):
+def extract_volume_matrix(image, rows, columns):
     """
     Extracts information about volume and shape of the object on given image.
     The resulting matrix with specified shape will contain information about how
     much of the object is present in the according window.
     For further details uncomment visual debug section.
 
-    :param in_file: File containing image to be processed.
+    :param image: Image to be processed.
     :param rows: Number of desired rows - windows in single ange view.
     :param columns: Number of desired columns - angles separating the image.
     :return: Volume-shape matrix in a vector form with values in [0; 1].
     """
-    # Read an image file using matplotlib into a numpy array
-    img = mpimg.imread(in_file)
-
     # Use image processing module of scipy to find the center of the leaf
-    cy, cx = ndi.center_of_mass(img)
+    cy, cx = ndi.center_of_mass(image)
 
     out = np.zeros((rows, columns))
 
@@ -103,7 +120,7 @@ def extract_volume_matrix(in_file, rows, columns):
     xs = []
     ys = []
 
-    width, height = img.shape
+    width, height = image.shape
     max_dist = max(width, height) / 2
     phi_step = 360 / float(columns) / 2.
     dist_step = max_dist / float(rows) / 2.
@@ -124,7 +141,7 @@ def extract_volume_matrix(in_file, rows, columns):
                     miss = 1
                 xs.append(x_pos)
                 ys.append(y_pos)
-                if miss == 0 and img[y_pos, x_pos]:
+                if miss == 0 and image[y_pos, x_pos]:
                     out[dist][phi] += 1
     out /= samples
 
@@ -147,9 +164,15 @@ def extract_volume_matrix(in_file, rows, columns):
     return np.asarray(out).reshape(-1)
 
 
-def extract_image_descriptors(in_file, num_descriptors, shape_rows=8, shape_columns=20):
+def find_main_axe(image):
+    # TODO
+    return image
+
+
+def extract_image_descriptors(in_file, num_descriptors, shape_rows=8, shape_columns=10):
     """
     Generates a vector of characterizations from given file
+
     :param in_file: File containing image to be processed.
     :param num_descriptors: Number of required fourier descriptors.
     :param shape_rows: Number of parts to use for a shape-volume retrieval in one direction.
@@ -157,24 +180,97 @@ def extract_image_descriptors(in_file, num_descriptors, shape_rows=8, shape_colu
     :return: Vector with all desired characterizations of the input image.
     """
     # Read an image file using matplotlib into a numpy array
-    img = mpimg.imread(in_file)
-    cy, cx = ndi.center_of_mass(img)
+    img_orig = mpimg.imread(in_file)
+    cy, cx = ndi.center_of_mass(img_orig)
 
     # Find minimal bounding box
-    img = util.img_as_ubyte(img) > 110
-    label_img = label(img)
-    props = measure.regionprops(label_img, intensity_image=img)
+    img_orig = util.img_as_ubyte(img_orig) > 110
+    label_img = label(img_orig)
+    props = measure.regionprops(label_img, intensity_image=img_orig)
     min_row, min_col, max_row, max_col = props[0].bbox
     wid = max_col - min_col
     hei = max_row - min_row
 
     # Stack all characterizations into one vector
     all_ds = np.hstack((
-        extract_fourier_descriptors(in_file, num_descriptors),  # Fourier descriptors
-        extract_volume_matrix(in_file, rows=shape_rows, columns=shape_columns),  # Vectorized shape-volume matrix
+        # extract_distance_line(img_orig),  # Distance curve
+        extract_fourier_descriptors(img_orig, num_descriptors),  # Fourier descriptors
+        # extract_volume_matrix(img_orig, rows=shape_rows, columns=shape_columns),  # Vectorized shape-volume matrix
         min(wid, hei) / float(max(wid, hei)),  # Similarity to rectangle
         cy / float(hei),  # Normalized centroid y position
         cx / float(wid),  # Normalized centroid x position
-        ))
+    ))
 
     return all_ds
+
+
+def visualize_leaf(curve, number):
+    # Read an image file using matplotlib into a numpy array
+    img = mpimg.imread("images/"+str(number)+".jpg")
+
+    # Use image processing module of scipy to find the center of the leaf
+    cy, cx = ndi.center_of_mass(img)
+
+    # scikit-learn imaging contour finding, returns a list of found edges, we select the longest one
+    contour = max(measure.find_contours(img, .8), key=len)
+
+    # Move contour centroid to zero
+    contour[::, 1] -= cx
+    contour[::, 0] -= cy
+
+    polar_contour_dist = np.array([cart2pol(rho, phi) for rho, phi in contour])
+    # polar_contour_angle = polar_contour_dist[::, 1]
+    polar_contour_dist = polar_contour_dist[::, 0]
+
+    contour = extract_distance_line(img, False)
+
+    plt.subplot(131)
+    plt.title("picture "+str(number))
+    plt.plot(contour[::, 1], contour[::, 0], linewidth=0.5)
+
+    # Calculate reconstruction based on original data
+    leaf = curve[64:127]
+
+    max_polar_countour_dist = max(polar_contour_dist)
+    max_ipolar_countour_dist = max(leaf)
+
+    k = 0
+    ipolar_contourx = np.zeros((len(leaf), 1))
+    ipolar_contoury = np.zeros((len(leaf), 1))
+    for i in range(len(leaf)):
+        ipolar_contourx[k], ipolar_contoury[k] = pol2cart(leaf[k] / max_ipolar_countour_dist * max_polar_countour_dist,
+                                                          float(i) / len(leaf) * 2 * np.pi)
+        k += 1
+
+    plt.subplot(132)
+    plt.title("original reconstructed")
+    plt.plot(np.vstack((ipolar_contourx, ipolar_contourx[0])), np.vstack((ipolar_contoury, ipolar_contoury[0])))
+
+    # Calculate best possible reconstruction with given data
+    leaf = polar_contour_dist
+
+    k = 0
+    ipolar_contourx = np.zeros((len(leaf), 1))
+    ipolar_contoury = np.zeros((len(leaf), 1))
+    for i in range(len(leaf)):
+        ipolar_contourx[k], ipolar_contoury[k] = pol2cart(leaf[k] / max_ipolar_countour_dist * max_polar_countour_dist,
+                                                          float(i) / len(leaf) * 2 * np.pi)
+                                                          # polar_contour_angle[k])
+        k += 1
+
+    plt.subplot(133)
+    plt.title("best possible reconstruction")
+    plt.plot(np.vstack((ipolar_contourx, ipolar_contourx[0])), np.vstack((ipolar_contoury, ipolar_contoury[0])))
+
+    plt.show()
+
+
+def visualize_data(data, ids):
+    """
+    Visualization of all given data. Corresponding IDs of images must be provided.
+
+    :param data: Original matrix with 192 features for every leaf sample.
+    :param ids: IDs of corresponding images for given samples.
+    """
+    for i in range(data.shape[0]):
+        visualize_leaf(data[i], number=ids[i])
